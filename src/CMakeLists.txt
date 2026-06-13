@@ -1,126 +1,190 @@
 # SPDX-FileCopyrightText: 2026 Kushview, LLC
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Element static library
-add_library(element STATIC)
-add_library(kv::element ALIAS element)
+option(ELEMENT_BUILD_PLUGINS "Build the plugin versions of Element" OFF)
+option(ELEMENT_BUILD_TESTS "Build the unit tests" ON)
+option(ELEMENT_ENABLE_ASIO "Build with ASIO support" OFF)
+option(ELEMENT_ENABLE_VST2 "Build with VST2 support" OFF)
+option(ELEMENT_ENABLE_LTO "Build with Link Time Optimization" OFF)
+option(ELEMENT_ENABLE_UPDATER "Build with updater support" OFF)
+option(ELEMENT_LOCAL_AUTH "Use local dev auth endpoints instead of production" OFF)
 
-set_target_properties(element PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-    CXX_VISIBILITY_PRESET hidden
-    C_VISIBILITY_PRESET hidden
-    VISIBILITY_INLINES_HIDDEN ON
-)
-
-target_include_directories(element
-    PUBLIC
-        "${GENERATED_INCLUDE_DIR}"
-        "${PROJECT_SOURCE_DIR}/include"
-        "${PROJECT_SOURCE_DIR}/src"
-        "${PROJECT_SOURCE_DIR}/src/lua/sol"
-        "${PROJECT_SOURCE_DIR}/src/lua/src"
-        "${PROJECT_SOURCE_DIR}/deps/clap-juce-extensions/clap-libs/clap/include"
-        "${PROJECT_SOURCE_DIR}/deps/clap-juce-extensions/clap-libs/clap-helpers/include"
-        "${Boost_INCLUDE_DIRS}"
-)
-
-file(GLOB_RECURSE ELEMENT_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
-
-target_sources(element PRIVATE ${ELEMENT_SOURCES})
+set(ELEMENT_APP_PLIST_TO_MERGE "")
 
 if(APPLE)
-    target_sources(element PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/ui/nsviewwithparent.mm"
-        "${CMAKE_CURRENT_SOURCE_DIR}/urlhandler.mm"
-    )
+    enable_language(OBJC)
+    enable_language(OBJCXX)
 endif()
 
-target_compile_definitions(element
-    PUBLIC BOOST_ALL_NO_LIB=1)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-target_compile_options(element PRIVATE ${SUIL_CFLAGS_OTHER})
-
-if(JACK_FOUND)
-    message(STATUS "JACK audio driver enabled")
-    target_compile_definitions(element PUBLIC ELEMENT_USE_JACK=1)
-    target_include_directories(element PUBLIC ${JACK_INCLUDE_DIRS})
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+    set(USER_HOME_DIRECTORY "$ENV{USERPROFILE}")
+elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin") # Darwin is macOS
+    set(USER_HOME_DIRECTORY "$ENV{HOME}")
+else()
+    message(WARNING "Unsupported operating system for determining home directory.")
+    set(USER_HOME_DIRECTORY "") # Set to empty or a default value
 endif()
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    target_compile_options(element PRIVATE -Wno-sign-conversion -Wno-switch-enum -Wno-attributes)
-elseif(MSVC)
-    target_compile_options(element PRIVATE /wd4244)
+message(STATUS "User Home Directory: ${USER_HOME_DIRECTORY}")
+
+# Enable ccache if available
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    message(STATUS "Found ccache: ${CCACHE_PROGRAM}")
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+else()
+    message(STATUS "ccache not found")
 endif()
 
-target_compile_definitions(element
-    PUBLIC
-        JUCE_MODAL_LOOPS_PERMITTED=1
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=1
-        JUCE_USE_XRENDER=1
-        JUCE_LOAD_CURL_SYMBOLS_LAZILY=1
-        JUCE_PLUGINHOST_LV2=1
-        JUCE_PLUGINHOST_VST3=1
-        JUCE_PLUGINHOST_AU=1
-        JUCE_VST3_CAN_REPLACE_VST2=0)
+include(GNUInstallDirs)
+include(FetchContent)
 
-# [修改1] 将 element_lua 静态库加入链接，确保 Lua 运行时被正确包含
-target_link_libraries(element
-    PUBLIC
-        juce::juce_core
-        juce::juce_gui_basics
-        juce::juce_gui_extra
-        juce::juce_osc
-        juce::juce_dsp
-        juce::juce_data_structures
-        juce::juce_audio_basics
-        juce::juce_audio_devices
-        juce::juce_audio_processors
-        juce::juce_audio_formats
-        juce::juce_audio_utils
-        juce::juce_recommended_config_flags
-        element-binarydata
-        element-luascripts
-        element-luamods
-        element_lua
-        sol2::sol2
-    )
-
-if(ELEMENT_ENABLE_UPDATER)
-    message(STATUS "Element updater enabled")
-    target_compile_definitions(element PUBLIC ELEMENT_UPDATER=1)
-endif()
-
-if(ELEMENT_LOCAL_AUTH)
-    message(STATUS "Element local auth endpoints enabled")
-    target_compile_definitions(element PRIVATE ELEMENT_LOCAL_AUTH=1)
-endif()
-
-if(ELEMENT_ENABLE_LTO)
-    message("Link Time Optimization enabled")
-    target_link_libraries(element PUBLIC juce::juce_recommended_lto_flags)
-endif()
-
+# Fetch ASIO
 if(WIN32 AND ELEMENT_ENABLE_ASIO)
-    message("ASIO audio device support enabled")
-    target_include_directories(element PUBLIC "${ASIOSDK_SOURCE_DIR}/common")
-    target_compile_definitions(element PUBLIC JUCE_ASIO=1)
-    # [修改2] 抑制 ASIO SDK 在 MSVC Debug 构建中的弃用警告
-    target_compile_options(element PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>)
+    FetchContent_Declare(ASIOSDK
+        GIT_REPOSITORY https://github.com/audiosdk/asio.git
+        GIT_TAG 496a0765b8bb9c26f764f22f9a9712a937177db2)
+    FetchContent_MakeAvailable(ASIOSDK)
 endif()
 
-# VST2 enable host support
+# JUCE VST2 SDK path setup
 if(ELEMENT_ENABLE_VST2)
-    message(STATUS "VST2 Plugin support enabled")
-    juce_set_vst2_sdk_path("${ELEMENT_VST2_SDK_PATH}")
-    target_compile_definitions(element PUBLIC JUCE_PLUGINHOST_VST=1)
-    target_link_libraries(element PUBLIC juce_vst2_sdk)
+    set(ELEMENT_VST2_SDK_PATH "${USER_HOME_DIRECTORY}/SDKs/vstsdk2.4")
+    # set(JUCE_GLOBAL_VST2_SDK_PATH "${ELEMENT_VST2_SDK_PATH}")
+    message(STATUS "VST2 SDK Path: ${ELEMENT_VST2_SDK_PATH}")
 endif()
 
-# MSVC 14.44+ constexpr mutex constructor workaround (debug only).
-if(MSVC)
-    target_compile_definitions(element PRIVATE
-        $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
-endif()
+# Setup a plugin by target name.
+# Applies symbol visibility, MSVC debug workarounds, and platform-specific
+# linker flags to the main target AND all format sub-targets (AU, CLAP,
+# LV2, VST3, VST) so that every compiled module gets consistent settings.
+function(element_setup_plugin tgt)
+    # Collect all targets that belong to this plugin
+    set(_all_targets ${tgt})
+    foreach(_suffix AU CLAP LV2 VST3 VST)
+        if(TARGET ${tgt}_${_suffix})
+            list(APPEND _all_targets ${tgt}_${_suffix})
+        endif()
+    endforeach()
+
+    # Apply common properties to every target in the plugin family
+    foreach(_t ${_all_targets})
+        # Hide symbols in plugin to prevent collision with host
+        set_target_properties(${_t} PROPERTIES
+            CXX_VISIBILITY_PRESET hidden
+            C_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
+        )
+
+        # MSVC 14.44+ constexpr std::mutex constructor zero-initializes
+        # _Thread_id to -1. In debug builds, _Mtx_lock's deadlock detection
+        # can misfire when JUCE acquires a mutex inside a noexcept function,
+        # causing std::terminate(). This define restores the old
+        # _Mtx_init_in_situ path.
+        if(MSVC)
+            target_compile_definitions(${_t} PRIVATE
+                $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
+        endif()
+    endforeach()
+
+    # On macOS, add linker flag to strip hidden symbols
+    if(APPLE)
+        if(TARGET ${tgt}_AU)
+            get_target_property(outname ${tgt} JUCE_PRODUCT_NAME)
+            string(REPLACE "-" "_" outsym ${outname})
+            target_link_options(${tgt}_AU PRIVATE "LINKER:-exported_symbol,_${outsym}AUFactory")
+            unset(outname)
+            unset(outsym)
+        endif()
+        if(TARGET ${tgt}_CLAP)
+            target_link_options(${tgt}_CLAP PRIVATE "LINKER:-exported_symbol,_clap_entry")
+        endif()
+        if(TARGET ${tgt}_VST3)
+            target_link_options(${tgt}_VST3 PRIVATE "LINKER:-exported_symbol,_GetPluginFactory")
+            target_link_options(${tgt}_VST3 PRIVATE "LINKER:-exported_symbol,_bundleEntry")
+            target_link_options(${tgt}_VST3 PRIVATE "LINKER:-exported_symbol,_bundleExit")
+        endif()
+        if(TARGET ${tgt}_LV2)
+            target_link_options(${tgt}_LV2 PRIVATE "LINKER:-exported_symbol,_lv2_descriptor")
+            target_link_options(${tgt}_LV2 PRIVATE "LINKER:-exported_symbol,_lv2ui_descriptor")
+        endif()
+        if(TARGET ${tgt}_VST)
+            target_link_options(${tgt}_VST PRIVATE "LINKER:-exported_symbol,_VSTPluginMain")
+        endif()
+    endif()
+endfunction()
+
+# Install a plugin by target name
+function(element_install_plugin tgt)
+    if(LINUX)
+        install(TARGETS ${tgt}_CLAP DESTINATION "lib/clap")
+        install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${tgt}_artefacts/$<CONFIG>/LV2/"
+            DESTINATION "lib/lv2")
+        install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${tgt}_artefacts/$<CONFIG>/VST3/"
+            DESTINATION "lib/vst3")
+    elseif(WIN32)
+        install(TARGETS ${tgt}_CLAP DESTINATION "CLAP")
+        install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${tgt}_artefacts/$<CONFIG>/LV2/"
+            DESTINATION "LV2")
+        install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${tgt}_artefacts/$<CONFIG>/VST3/"
+            DESTINATION "VST3")
+    elseif(APPLE)
+        install(TARGETS "${tgt}_AU"   LIBRARY DESTINATION "Library/Audio/Plug-Ins/Components")
+        install(TARGETS "${tgt}_CLAP" LIBRARY DESTINATION "Library/Audio/Plug-Ins/CLAP")
+        install(TARGETS "${tgt}_VST3" LIBRARY DESTINATION "Library/Audio/Plug-Ins/VST3")
+        # LV2 on macOS isn't a real library bundle.
+        install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${tgt}_artefacts/$<CONFIG>/LV2/"
+            DESTINATION "Library/Audio/Plug-Ins/LV2")
+    endif()
+
+    if(ELEMENT_ENABLE_VST2)
+        if(LINUX)
+            install(TARGETS ${tgt}_VST DESTINATION "lib/vst")
+        elseif(WIN32)
+            install(TARGETS ${tgt}_VST DESTINATION "VST")
+        elseif(APPLE)
+            install(TARGETS "${tgt}_VST" LIBRARY DESTINATION "Library/Audio/Plug-Ins/VST")
+        endif()
+    endif()
+endfunction()
+
+# Post-build bundle creation for VST3 plugin format.
+# Acts as a safety net: if JUCE's own bundle helper fails or doesn't
+# produce the expected bundle directory structure, this function ensures
+# the compiled DLL is placed into the correct VST3 bundle layout.
+#
+# Usage: element_setup_plugin_bundle(element_instrument)
+#        element_setup_plugin_bundle(element_effect)
+function(element_setup_plugin_bundle tgt)
+    get_target_property(_prod_name ${tgt} JUCE_PRODUCT_NAME)
+    if(NOT _prod_name)
+        message(WARNING "element_setup_plugin_bundle: ${tgt} has no JUCE_PRODUCT_NAME")
+        return()
+    endif()
+
+    if(WIN32 AND TARGET ${tgt}_VST3)
+        # Determine processor directory for VST3 bundle
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(_arch_dir "x86_64-win")
+        else()
+            set(_arch_dir "x86-win")
+        endif()
+
+        add_custom_command(TARGET ${tgt}_VST3 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "$<TARGET_FILE_DIR:${tgt}_VST3>/${_prod_name}.vst3/Contents/${_arch_dir}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:${tgt}_VST3>"
+                    "$<TARGET_FILE_DIR:${tgt}_VST3>/${_prod_name}.vst3/Contents/${_arch_dir}/${_prod_name}.vst3"
+            COMMENT "Ensuring VST3 bundle: ${_prod_name}.vst3"
+            VERBATIM
+        )
+    endif()
+endfunction()
