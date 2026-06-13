@@ -61,23 +61,38 @@ if(ELEMENT_ENABLE_VST2)
     message(STATUS "VST2 SDK Path: ${ELEMENT_VST2_SDK_PATH}")
 endif()
 
-# Setup a plugin by target name
+# Setup a plugin by target name.
+# Applies symbol visibility, MSVC debug workarounds, and platform-specific
+# linker flags to the main target AND all format sub-targets (AU, CLAP,
+# LV2, VST3, VST) so that every compiled module gets consistent settings.
 function(element_setup_plugin tgt)
-    # Hide symbols in plugin to prevent collision with host
-    set_target_properties(${tgt} PROPERTIES
-        CXX_VISIBILITY_PRESET hidden
-        C_VISIBILITY_PRESET hidden
-        VISIBILITY_INLINES_HIDDEN ON
-    )
+    # Collect all targets that belong to this plugin
+    set(_all_targets ${tgt})
+    foreach(_suffix AU CLAP LV2 VST3 VST)
+        if(TARGET ${tgt}_${_suffix})
+            list(APPEND _all_targets ${tgt}_${_suffix})
+        endif()
+    endforeach()
 
-    # MSVC 14.44+ constexpr std::mutex constructor workaround (debug only).
-    # The constexpr constructor zero-initializes _Thread_id to -1, causing
-    # _Mtx_lock's deadlock detection to misfire in JUCE noexcept functions.
-    # This define restores the old _Mtx_init_in_situ path.
-    if(MSVC)
-        target_compile_definitions(${tgt} PRIVATE
-            $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
-    endif()
+    # Apply common properties to every target in the plugin family
+    foreach(_t ${_all_targets})
+        # Hide symbols in plugin to prevent collision with host
+        set_target_properties(${_t} PROPERTIES
+            CXX_VISIBILITY_PRESET hidden
+            C_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
+        )
+
+        # MSVC 14.44+ constexpr std::mutex constructor zero-initializes
+        # _Thread_id to -1. In debug builds, _Mtx_lock's deadlock detection
+        # can misfire when JUCE acquires a mutex inside a noexcept function,
+        # causing std::terminate(). This define restores the old
+        # _Mtx_init_in_situ path.
+        if(MSVC)
+            target_compile_definitions(${_t} PRIVATE
+                $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
+        endif()
+    endforeach()
 
     # On macOS, add linker flag to strip hidden symbols
     if(APPLE)
@@ -137,5 +152,39 @@ function(element_install_plugin tgt)
         elseif(APPLE)
             install(TARGETS "${tgt}_VST" LIBRARY DESTINATION "Library/Audio/Plug-Ins/VST")
         endif()
+    endif()
+endfunction()
+
+# Post-build bundle creation for VST3 plugin format.
+# Acts as a safety net: if JUCE's own bundle helper fails or doesn't
+# produce the expected bundle directory structure, this function ensures
+# the compiled DLL is placed into the correct VST3 bundle layout.
+#
+# Usage: element_setup_plugin_bundle(element_instrument)
+#        element_setup_plugin_bundle(element_effect)
+function(element_setup_plugin_bundle tgt)
+    get_target_property(_prod_name ${tgt} JUCE_PRODUCT_NAME)
+    if(NOT _prod_name)
+        message(WARNING "element_setup_plugin_bundle: ${tgt} has no JUCE_PRODUCT_NAME")
+        return()
+    endif()
+
+    if(WIN32 AND TARGET ${tgt}_VST3)
+        # Determine processor directory for VST3 bundle
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(_arch_dir "x86_64-win")
+        else()
+            set(_arch_dir "x86-win")
+        endif()
+
+        add_custom_command(TARGET ${tgt}_VST3 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "$<TARGET_FILE_DIR:${tgt}_VST3>/${_prod_name}.vst3/Contents/${_arch_dir}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:${tgt}_VST3>"
+                    "$<TARGET_FILE_DIR:${tgt}_VST3>/${_prod_name}.vst3/Contents/${_arch_dir}/${_prod_name}.vst3"
+            COMMENT "Ensuring VST3 bundle: ${_prod_name}.vst3"
+            VERBATIM
+        )
     endif()
 endfunction()
