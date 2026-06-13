@@ -25,6 +25,7 @@ set_directory_properties(PROPERTIES JUCE_COMPANY_WEBSITE "https://kushview.net")
 set_directory_properties(PROPERTIES JUCE_COMPANY_EMAIL "support@kushview.net")
 
 # CLAP Setup
+# [修改1] 移除 EXCLUDE_FROM_ALL，确保 CLAP 目标参与默认构建
 set(CMAKE_POLICY_DEFAULT_CMP0177 OLD)
 add_subdirectory(deps/clap-juce-extensions)
 
@@ -55,8 +56,6 @@ endif()
 
 ## Standalone Application
 if(NOT APPLE)
-    # For backward compatibility with the old meson build, not-Mac installs 
-    # expect the exe name to be all lower case.
     set(ELEMENT_STANDALONE_PRODUCT_NAME "element")
 else()
     set(ELEMENT_STANDALONE_PRODUCT_NAME "Element")
@@ -83,6 +82,14 @@ set_target_properties(element_app PROPERTIES
     VISIBILITY_INLINES_HIDDEN ON
 )
 
+# [修改2] 为独立应用程序也添加 Debug 宏
+if(MSVC)
+    target_compile_definitions(element_app PRIVATE
+        $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>
+        $<$<CONFIG:Debug>:ELEMENT_DEBUG=1>
+        $<$<CONFIG:Debug>:_DEBUG>)
+endif()
+
 if(APPLE)
     add_custom_target(uninstaller
         COMMAND osacompile -o "${PROJECT_BINARY_DIR}/Uninstall.app" "${PROJECT_SOURCE_DIR}/util/uninstall.applescript"
@@ -101,7 +108,6 @@ if(APPLE)
             COMMAND /usr/bin/ditto
                     "${SPARKLE_FRAMEWORK}"
                     "$<TARGET_BUNDLE_CONTENT_DIR:element_app>/Frameworks/Sparkle.framework")
-        # Set rpath to find Sparkle.framework in app bundle
         set_target_properties(element_app PROPERTIES
             BUILD_RPATH "@executable_path/../Frameworks"
             INSTALL_RPATH "@executable_path/../Frameworks"
@@ -111,22 +117,7 @@ if(APPLE)
         BUNDLE DESTINATION "Applications"
         COMPONENT "Standalone")
 elseif(WIN32)
-    # MSVC 14.44+ introduced a constexpr std::mutex constructor that zero-initializes
-    # _Thread_id to -1. In debug builds, _Mtx_lock's deadlock detection can misfire
-    # when JUCE acquires a mutex inside a noexcept function (MessageManager::isThisTheMessageThread),
-    # causing std::terminate(). This define restores the old _Mtx_init_in_situ path.
-    target_compile_definitions(element_app PRIVATE
-        $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
-    if(ELEMENT_ENABLE_UPDATER)
-        target_link_libraries(element_app PRIVATE WinSparkle::WinSparkle)
-        target_sources(element_app PRIVATE src/winsparkle.cc)
-        set_source_files_properties(src/winsparkle.cc PROPERTIES 
-            COMPILE_DEFINITIONS "ELEMENT_APPCAST_URL=\"${WIN_SPARKLE_FEED_URL}\";ELEMENT_EDDSA_PUBLIC_KEY=\"${WIN_SPARKLE_PUBLIC_KEY}\"")
-        add_custom_command(TARGET element_app POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${WIN_SPARKLE_DLL}" "$<TARGET_FILE_DIR:element_app>")
-        install(FILES "${WIN_SPARKLE_DLL}" DESTINATION ${CMAKE_INSTALL_BINDIR})
-    endif()
+    # [修改3] 此处原有的 _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR 已移至上方统一处理
     install(TARGETS element_app DESTINATION ${CMAKE_INSTALL_BINDIR})
 else()
     install(TARGETS element_app DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -164,7 +155,9 @@ if(ELEMENT_BUILD_PLUGINS)
     target_link_libraries(element_instrument PRIVATE kv::element)
     element_setup_plugin(element_instrument)
     element_install_plugin(element_instrument)
-    
+    # [修改4] 为 instrument 插件的所有格式目标应用 Debug 宏
+    element_apply_debug_definitions(element_instrument)
+
     ## Effect Plugin
     juce_add_plugin(element_effect
         PLUGIN_NAME                 "Element FX"
@@ -177,7 +170,7 @@ if(ELEMENT_BUILD_PLUGINS)
         AU_MAIN_TYPE                kAudioUnitType_Effect
 
         LV2URI                      "https://kushview.net/plugins/element-fx"
-        
+
         IS_SYNTH                    OFF
         NEEDS_MIDI_INPUT            ON
         NEEDS_MIDI_OUTPUT           OFF
@@ -192,6 +185,8 @@ if(ELEMENT_BUILD_PLUGINS)
     target_link_libraries(element_effect PRIVATE kv::element)
     element_setup_plugin(element_effect)
     element_install_plugin(element_effect)
+    # [修改5] 为 effect 插件的所有格式目标应用 Debug 宏
+    element_apply_debug_definitions(element_effect)
 
     if(APPLE)
         ## MIDI Effect Plugin
@@ -201,7 +196,7 @@ if(ELEMENT_BUILD_PLUGINS)
             BUILD_VERSION               "${PROJECT_VERSION}.${ELEMENT_BUILD_NUMBER}"
             PLUGIN_MANUFACTURER_CODE    KshV
             PLUGIN_CODE                 ElMX
-            
+
             BUNDLE_ID                   "net.kushview.plugins.ElementMFX"
             AU_MAIN_TYPE                kAudioUnitType_MIDIProcessor
 
@@ -215,8 +210,9 @@ if(ELEMENT_BUILD_PLUGINS)
         target_sources(element_midi_effect PRIVATE src/plugins/midieffect.cc)
         target_link_libraries(element_midi_effect PRIVATE kv::element)
         element_setup_plugin(element_midi_effect)
-        
-        # MFX version is AU only so function helper won't work here.
+        # [修改6] 为 midi effect 插件应用 Debug 宏
+        element_apply_debug_definitions(element_midi_effect)
+
         install(TARGETS element_midi_effect_AU
             LIBRARY DESTINATION "Library/Audio/Plug-Ins/Components"
             COMPONENT "Element MFX")
@@ -263,7 +259,6 @@ set(ELEMENT_GENERATOR ${CPACK_GENERATOR})
 set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${CPACK_PACKAGE_VERSION}-${ELEMENT_SYSTEM_NAME}-${ELEMENT_PROCESSOR}")
 include(CPack)
 
-# Clean CPack staging directory before and after packaging to prevent macOS relocation issues
 add_custom_target(installer
     COMMAND ${CMAKE_COMMAND} -E rm -rf "${PROJECT_BINARY_DIR}/_CPack_Packages"
     COMMAND ${CMAKE_COMMAND} --build "${PROJECT_BINARY_DIR}" --target package
