@@ -130,3 +130,29 @@ function(element_install_plugin tgt)
         endif()
     endif()
 endfunction()
+
+# Apply debug definitions to a plugin and all its format targets
+function(element_apply_debug_definitions tgt)
+    set(_format_targets
+        ${tgt}
+        ${tgt}_AU
+        ${tgt}_CLAP
+        ${tgt}_VST3
+        ${tgt}_LV2
+        ${tgt}_VST
+        ${tgt}_Unity
+    )
+    foreach(_ft ${_format_targets})
+        if(TARGET ${_ft})
+            target_compile_definitions(${_ft} PRIVATE
+                $<$<CONFIG:Debug>:ELEMENT_DEBUG=1>
+                $<$<CONFIG:Debug>:_DEBUG>
+            )
+            if(MSVC)
+                target_compile_definitions(${_ft} PRIVATE
+                    $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>
+                )
+            endif()
+        endif()
+    endforeach()
+endfunction()
