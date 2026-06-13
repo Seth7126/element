@@ -41,20 +41,21 @@ jobs:
         key: windows-2022-ccache-debug-${{ github.sha }}  
         restore-keys: |  
           windows-2022-ccache-debug-  
+    - name: Configure CMake (Debug, x64)
+      run: >-
+        cmake -B build -G Ninja
+        -DCMAKE_C_COMPILER=cl
+        -DCMAKE_CXX_COMPILER=cl
+        -DCMAKE_BUILD_TYPE=Debug
+        -DELEMENT_ENABLE_ASIO=ON
+        -DELEMENT_ENABLE_UPDATER=OFF
+        -DELEMENT_BUILD_PLUGINS=ON
+        -DELEMENT_BUILD_TESTS=ON
+        -DBoost_INCLUDE_DIR="C:/local/boost_1_87_0"
+        -DBoost_LIBRARY_DIRS="C:/local/boost_1_87_0/lib64-msvc-14.3"
+      env:
+        BOOST_ROOT: C:/local/boost_1_87_0
   
-    - name: Configure CMake (Debug, x64)  
-      run: |  
-        cmake -B build -G Ninja `  
-          -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl `  
-          -DCMAKE_BUILD_TYPE=Debug `  
-          -DELEMENT_ENABLE_ASIO=ON `  
-          -DELEMENT_ENABLE_UPDATER=OFF `  
-          -DELEMENT_BUILD_PLUGINS=ON `  
-          -DELEMENT_BUILD_TESTS=ON `  
-          -DBoost_INCLUDE_DIR="C:/local/boost_1_87_0" `  
-          -DBoost_LIBRARY_DIRS="C:/local/boost_1_87_0/lib64-msvc-14.3"  
-      env:  
-        BOOST_ROOT: C:/local/boost_1_87_0  
   
     - name: Build  
       run: cmake --build build --config Debug  
