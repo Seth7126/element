@@ -46,7 +46,28 @@ add_subdirectory(include/element)
 add_subdirectory(src/el)
 add_subdirectory(src)
 
+# MSVC Debug workaround — applied to all targets consuming JUCE.
+# MSVC 14.44+ constexpr mutex constructor causes spurious deadlock
+# detection in JUCE's MessageManager::isThisTheMessageThread when
+# called from noexcept context, triggering std::terminate() in Debug.
+# _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR restores the old _Mtx_init_in_situ path.
+if(MSVC)
+    if(TARGET element_app)
+        target_compile_definitions(element_app PRIVATE
+            $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
+    endif()
+    if(TARGET element_instrument)
+        target_compile_definitions(element_instrument PRIVATE
+            $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
+    endif()
+    if(TARGET element_effect)
+        target_compile_definitions(element_effect PRIVATE
+            $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
+    endif()
+endif()
+
 ## Tests
+
 if (ELEMENT_BUILD_TESTS)
     ## Unit tests
     enable_testing()
