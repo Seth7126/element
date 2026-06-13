@@ -70,6 +70,15 @@ function(element_setup_plugin tgt)
         VISIBILITY_INLINES_HIDDEN ON
     )
 
+    # MSVC 14.44+ constexpr std::mutex constructor workaround (debug only).
+    # The constexpr constructor zero-initializes _Thread_id to -1, causing
+    # _Mtx_lock's deadlock detection to misfire in JUCE noexcept functions.
+    # This define restores the old _Mtx_init_in_situ path.
+    if(MSVC)
+        target_compile_definitions(${tgt} PRIVATE
+            $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
+    endif()
+
     # On macOS, add linker flag to strip hidden symbols
     if(APPLE)
         if(TARGET ${tgt}_AU)
@@ -130,30 +139,3 @@ function(element_install_plugin tgt)
         endif()
     endif()
 endfunction()
-
-# 为插件目标及其所有格式子目标应用 Debug 宏
-function(element_apply_debug_definitions tgt)
-    set(_format_targets
-        ${tgt}
-        ${tgt}_AU
-        ${tgt}_CLAP
-        ${tgt}_VST3
-        ${tgt}_LV2
-        ${tgt}_VST
-        ${tgt}_Unity
-    )
-    foreach(_ft ${_format_targets})
-        if(TARGET ${_ft})
-            target_compile_definitions(${_ft} PRIVATE
-                $<$<CONFIG:Debug>:ELEMENT_DEBUG=1>
-                $<$<CONFIG:Debug>:_DEBUG>
-            )
-            if(MSVC)
-                target_compile_definitions(${_ft} PRIVATE
-                    $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>
-                )
-            endif()
-        endif()
-    endforeach()
-endfunction()
-
