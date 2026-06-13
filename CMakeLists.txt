@@ -163,7 +163,6 @@ if(ELEMENT_BUILD_PLUGINS)
     target_sources(element_instrument PRIVATE src/plugins/instrument.cc)
     target_link_libraries(element_instrument PRIVATE kv::element)
     element_setup_plugin(element_instrument)
-    element_setup_plugin_bundle(element_instrument)
     element_install_plugin(element_instrument)
 
     ## Effect Plugin
@@ -192,7 +191,6 @@ if(ELEMENT_BUILD_PLUGINS)
     target_sources(element_effect PRIVATE src/plugins/effect.cc)
     target_link_libraries(element_effect PRIVATE kv::element)
     element_setup_plugin(element_effect)
-    element_setup_plugin_bundle(element_effect)
     element_install_plugin(element_effect)
 
     if(APPLE)
