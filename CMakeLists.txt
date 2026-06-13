@@ -55,7 +55,7 @@ endif()
 
 ## Standalone Application
 if(NOT APPLE)
-    # For backward compatibility with the old meson build, not-Mac installs 
+    # For backward compatibility with the old meson build, not-Mac installs
     # expect the exe name to be all lower case.
     set(ELEMENT_STANDALONE_PRODUCT_NAME "element")
 else()
@@ -120,7 +120,7 @@ elseif(WIN32)
     if(ELEMENT_ENABLE_UPDATER)
         target_link_libraries(element_app PRIVATE WinSparkle::WinSparkle)
         target_sources(element_app PRIVATE src/winsparkle.cc)
-        set_source_files_properties(src/winsparkle.cc PROPERTIES 
+        set_source_files_properties(src/winsparkle.cc PROPERTIES
             COMPILE_DEFINITIONS "ELEMENT_APPCAST_URL=\"${WIN_SPARKLE_FEED_URL}\";ELEMENT_EDDSA_PUBLIC_KEY=\"${WIN_SPARKLE_PUBLIC_KEY}\"")
         add_custom_command(TARGET element_app POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -163,8 +163,9 @@ if(ELEMENT_BUILD_PLUGINS)
     target_sources(element_instrument PRIVATE src/plugins/instrument.cc)
     target_link_libraries(element_instrument PRIVATE kv::element)
     element_setup_plugin(element_instrument)
+    element_setup_plugin_bundle(element_instrument)
     element_install_plugin(element_instrument)
-    
+
     ## Effect Plugin
     juce_add_plugin(element_effect
         PLUGIN_NAME                 "Element FX"
@@ -177,7 +178,7 @@ if(ELEMENT_BUILD_PLUGINS)
         AU_MAIN_TYPE                kAudioUnitType_Effect
 
         LV2URI                      "https://kushview.net/plugins/element-fx"
-        
+
         IS_SYNTH                    OFF
         NEEDS_MIDI_INPUT            ON
         NEEDS_MIDI_OUTPUT           OFF
@@ -191,6 +192,7 @@ if(ELEMENT_BUILD_PLUGINS)
     target_sources(element_effect PRIVATE src/plugins/effect.cc)
     target_link_libraries(element_effect PRIVATE kv::element)
     element_setup_plugin(element_effect)
+    element_setup_plugin_bundle(element_effect)
     element_install_plugin(element_effect)
 
     if(APPLE)
@@ -201,7 +203,7 @@ if(ELEMENT_BUILD_PLUGINS)
             BUILD_VERSION               "${PROJECT_VERSION}.${ELEMENT_BUILD_NUMBER}"
             PLUGIN_MANUFACTURER_CODE    KshV
             PLUGIN_CODE                 ElMX
-            
+
             BUNDLE_ID                   "net.kushview.plugins.ElementMFX"
             AU_MAIN_TYPE                kAudioUnitType_MIDIProcessor
 
@@ -215,7 +217,7 @@ if(ELEMENT_BUILD_PLUGINS)
         target_sources(element_midi_effect PRIVATE src/plugins/midieffect.cc)
         target_link_libraries(element_midi_effect PRIVATE kv::element)
         element_setup_plugin(element_midi_effect)
-        
+
         # MFX version is AU only so function helper won't work here.
         install(TARGETS element_midi_effect_AU
             LIBRARY DESTINATION "Library/Audio/Plug-Ins/Components"
