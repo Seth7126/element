@@ -131,7 +131,7 @@ function(element_install_plugin tgt)
     endif()
 endfunction()
 
-# Apply debug definitions to a plugin and all its format targets
+# 为插件目标及其所有格式子目标应用 Debug 宏
 function(element_apply_debug_definitions tgt)
     set(_format_targets
         ${tgt}
@@ -156,3 +156,4 @@ function(element_apply_debug_definitions tgt)
         endif()
     endforeach()
 endfunction()
+
