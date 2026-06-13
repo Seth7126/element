@@ -154,37 +154,3 @@ function(element_install_plugin tgt)
         endif()
     endif()
 endfunction()
-
-# Post-build bundle creation for VST3 plugin format.
-# Acts as a safety net: if JUCE's own bundle helper fails or doesn't
-# produce the expected bundle directory structure, this function ensures
-# the compiled DLL is placed into the correct VST3 bundle layout.
-#
-# Usage: element_setup_plugin_bundle(element_instrument)
-#        element_setup_plugin_bundle(element_effect)
-function(element_setup_plugin_bundle tgt)
-    get_target_property(_prod_name ${tgt} JUCE_PRODUCT_NAME)
-    if(NOT _prod_name)
-        message(WARNING "element_setup_plugin_bundle: ${tgt} has no JUCE_PRODUCT_NAME")
-        return()
-    endif()
-
-    if(WIN32 AND TARGET ${tgt}_VST3)
-        # Determine processor directory for VST3 bundle
-        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-            set(_arch_dir "x86_64-win")
-        else()
-            set(_arch_dir "x86-win")
-        endif()
-
-        add_custom_command(TARGET ${tgt}_VST3 POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory
-                    "$<TARGET_FILE_DIR:${tgt}_VST3>/${_prod_name}.vst3/Contents/${_arch_dir}"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$<TARGET_FILE:${tgt}_VST3>"
-                    "$<TARGET_FILE_DIR:${tgt}_VST3>/${_prod_name}.vst3/Contents/${_arch_dir}/${_prod_name}.vst3"
-            COMMENT "Ensuring VST3 bundle: ${_prod_name}.vst3"
-            VERBATIM
-        )
-    endif()
-endfunction()
