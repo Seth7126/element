@@ -5,7 +5,7 @@
 add_library(element STATIC)
 add_library(kv::element ALIAS element)
 
-set_target_properties(element PROPERTIES 
+set_target_properties(element PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     CXX_VISIBILITY_PRESET hidden
     C_VISIBILITY_PRESET hidden
@@ -21,23 +21,23 @@ target_include_directories(element
         "${PROJECT_SOURCE_DIR}/src/lua/src"
         "${PROJECT_SOURCE_DIR}/deps/clap-juce-extensions/clap-libs/clap/include"
         "${PROJECT_SOURCE_DIR}/deps/clap-juce-extensions/clap-libs/clap-helpers/include"
-        "${Boost_INCLUDE_DIRS}"       
+        "${Boost_INCLUDE_DIRS}"
 )
 
-file(GLOB_RECURSE ELEMENT_SOURCES 
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp" 
+file(GLOB_RECURSE ELEMENT_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
 
 target_sources(element PRIVATE ${ELEMENT_SOURCES})
 
 if(APPLE)
-    target_sources(element PRIVATE 
+    target_sources(element PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/ui/nsviewwithparent.mm"
         "${CMAKE_CURRENT_SOURCE_DIR}/urlhandler.mm"
     )
 endif()
 
-target_compile_definitions(element 
+target_compile_definitions(element
     PUBLIC BOOST_ALL_NO_LIB=1)
 
 target_compile_options(element PRIVATE ${SUIL_CFLAGS_OTHER})
@@ -51,11 +51,8 @@ endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     target_compile_options(element PRIVATE -Wno-sign-conversion -Wno-switch-enum -Wno-attributes)
 elseif(MSVC)
-    # MSVC doesn't support -Wno-sign-conversion; disable a relevant warning if needed
-    # e.g. /wd4244 or /wd4267 depending on the warning you want to suppress
     target_compile_options(element PRIVATE /wd4244)
 endif()
-
 
 target_compile_definitions(element
     PUBLIC
@@ -69,6 +66,7 @@ target_compile_definitions(element
         JUCE_PLUGINHOST_AU=1
         JUCE_VST3_CAN_REPLACE_VST2=0)
 
+# [修改1] 将 element_lua 静态库加入链接，确保 Lua 运行时被正确包含
 target_link_libraries(element
     PUBLIC
         juce::juce_core
@@ -86,6 +84,7 @@ target_link_libraries(element
         element-binarydata
         element-luascripts
         element-luamods
+        element_lua
         sol2::sol2
     )
 
@@ -108,6 +107,8 @@ if(WIN32 AND ELEMENT_ENABLE_ASIO)
     message("ASIO audio device support enabled")
     target_include_directories(element PUBLIC "${ASIOSDK_SOURCE_DIR}/common")
     target_compile_definitions(element PUBLIC JUCE_ASIO=1)
+    # [修改2] 抑制 ASIO SDK 在 MSVC Debug 构建中的弃用警告
+    target_compile_options(element PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>)
 endif()
 
 # VST2 enable host support
@@ -119,7 +120,6 @@ if(ELEMENT_ENABLE_VST2)
 endif()
 
 # MSVC 14.44+ constexpr mutex constructor workaround (debug only).
-# See CMakeLists.txt in the root for explanation.
 if(MSVC)
     target_compile_definitions(element PRIVATE
         $<$<CONFIG:Debug>:_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR>)
