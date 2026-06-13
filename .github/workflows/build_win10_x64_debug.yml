@@ -1,0 +1,104 @@
+name: Windows10 x64 Debug Build
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  build-windows-debug:
+    name: Build (Windows x64 Debug)
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Cache Chocolatey (Windows)
+      uses: actions/cache@v4
+      with:
+        path: ~\AppData\Local\Temp\chocolatey
+        key: windows-choco-${{ hashFiles('.github/workflows/build-windows-debug.yml') }}
+        restore-keys: |
+          windows-choco-
+
+    - name: Install dependencies (Windows)
+      run: |
+        choco install cmake ninja pandoc boost-msvc-14.3 -y
+
+    - name: Setup MSVC environment (Windows)
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: amd64
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: windows-2022-ccache-debug-${{ github.sha }}
+        restore-keys: |
+          windows-2022-ccache-debug-
+
+    - name: Configure CMake (Debug, x64)
+      run: >-
+        cmake -B build -G Ninja
+        -DCMAKE_C_COMPILER=cl
+        -DCMAKE_CXX_COMPILER=cl
+        -DCMAKE_BUILD_TYPE=Debug
+        -DELEMENT_ENABLE_ASIO=ON
+        -DELEMENT_ENABLE_UPDATER=OFF
+        -DELEMENT_BUILD_PLUGINS=ON
+        -DELEMENT_BUILD_TESTS=ON
+        -DBoost_INCLUDE_DIR="C:/local/boost_1_87_0"
+        -DBoost_LIBRARY_DIRS="C:/local/boost_1_87_0/lib64-msvc-14.3"
+      env:
+        BOOST_ROOT: C:/local/boost_1_87_0
+
+    - name: Build
+      run: cmake --build build --config Debug
+
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure
+
+    - name: List build artifacts (debug)
+      run: |
+        echo "=== Full build tree ==="
+        tree /F build\element_app_artefacts build\element_effect_artefacts build\element_instrument_artefacts 2>$null
+        echo "=== All .dll files ==="
+        Get-ChildItem -Path build -Recurse -Filter "*.dll" | Select-Object FullName
+        echo "=== All .exe files ==="
+        Get-ChildItem -Path build -Recurse -Filter "*.exe" | Select-Object FullName
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: element-windows-x64-debug
+        path: |
+          build/element_app_artefacts/**/*.exe
+          build/element_effect_artefacts/**/*.dll
+          build/element_effect_artefacts/**/*.pdb
+          build/element_effect_artefacts/**/*.vst3
+          build/element_effect_artefacts/**/*.clap
+          build/element_effect_artefacts/**/*.lv2
+          build/element_instrument_artefacts/**/*.dll
+          build/element_instrument_artefacts/**/*.pdb
+          build/element_instrument_artefacts/**/*.vst3
+          build/element_instrument_artefacts/**/*.clap
+          build/element_instrument_artefacts/**/*.lv2
+          build/**/KV-Element*.dll
+          build/**/KV-Element*.pdb
+          build/**/KV-Element-FX*.dll
+          build/**/KV-Element-FX*.pdb
+          build/**/CLAP/*.dll
+          build/**/CLAP/*.pdb
+          build/**/VST3/**/*.dll
+          build/**/VST3/**/*.pdb
+          build/**/LV2/**/*.dll
+          build/**/LV2/**/*.pdb
+          build/**/element.exe
+          build/**/element.pdb
+          build/**/*_vst3_helper.exe
+        if-no-files-found: warn
