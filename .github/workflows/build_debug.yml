@@ -25,10 +25,13 @@ jobs:
         key: windows-choco-${{ hashFiles('.github/workflows/build-windows-debug.yml') }}  
         restore-keys: |  
           windows-choco-  
-  
+    - name: Install JACK  
+      run: |  
+        Invoke-WebRequest -Uri "https://jackaudio.org/downloads/..." -OutFile jack.exe  
+        Start-Process jack.exe -ArgumentList "/S" -Wait
     - name: Install dependencies (Windows)  
       run: |  
-        choco install cmake ninja pandoc boost-msvc-14.3 jack -y  
+        choco install cmake ninja pandoc boost-msvc-14.3 -y  
   
     - name: Setup MSVC environment (Windows)  
       uses: ilammy/msvc-dev-cmd@v1  
