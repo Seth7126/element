@@ -28,7 +28,7 @@ jobs:
   
     - name: Install dependencies (Windows)  
       run: |  
-        choco install cmake ninja pandoc boost-msvc-14.3 -y  
+        choco install cmake ninja pandoc boost-msvc-14.3 jack -y  
   
     - name: Setup MSVC environment (Windows)  
       uses: ilammy/msvc-dev-cmd@v1  
