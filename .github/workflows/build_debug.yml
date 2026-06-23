@@ -25,10 +25,14 @@ jobs:
         key: windows-choco-${{ hashFiles('.github/workflows/build-windows-debug.yml') }}  
         restore-keys: |  
           windows-choco-  
-    - name: Install JACK  
+    - name: Install JACK2  
+      shell: pwsh  
       run: |  
-        Invoke-WebRequest -Uri "https://jackaudio.org/downloads/..." -OutFile jack.exe  
-        Start-Process jack.exe -ArgumentList "/S" -Wait
+        $url = "https://github.com/jackaudio/jack2-releases/releases/download/v1.9.22/jack2-win64-v1.9.22.exe"  
+        Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\jack2-installer.exe"  
+        Start-Process -FilePath "$env:TEMP\jack2-installer.exe" `  
+          -ArgumentList "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-" `  
+          -Wait -NoNewWindow
     - name: Install dependencies (Windows)  
       run: |  
         choco install cmake ninja pandoc boost-msvc-14.3 -y  
