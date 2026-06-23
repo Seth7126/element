@@ -25,14 +25,14 @@ jobs:
         key: windows-choco-${{ hashFiles('.github/workflows/build-windows-debug.yml') }}  
         restore-keys: |  
           windows-choco-  
+  
     - name: Install JACK2  
       shell: pwsh  
       run: |  
-        $url = "https://github.com/jackaudio/jack2-releases/releases/download/v1.9.22/jack2-win64-v1.9.22.exe"  
-        Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\jack2-installer.exe"  
-        Start-Process -FilePath "$env:TEMP\jack2-installer.exe" `  
-          -ArgumentList "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-" `  
-          -Wait -NoNewWindow
+        $installer = "$env:TEMP\jack2-installer.exe"  
+        Invoke-WebRequest -Uri "https://github.com/jackaudio/jack2-releases/releases/download/v1.9.22/jack2-win64-v1.9.22.exe" -OutFile $installer  
+        Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-" -Wait -NoNewWindow  
+  
     - name: Install dependencies (Windows)  
       run: |  
         choco install cmake ninja pandoc boost-msvc-14.3 -y  
@@ -48,21 +48,22 @@ jobs:
         key: windows-2022-ccache-debug-${{ github.sha }}  
         restore-keys: |  
           windows-2022-ccache-debug-  
-    - name: Configure CMake (Debug, x64)
-      run: >-
-        cmake -B build -G Ninja
-        -DCMAKE_C_COMPILER=cl
-        -DCMAKE_CXX_COMPILER=cl
-        -DCMAKE_BUILD_TYPE=Debug
-        -DELEMENT_ENABLE_ASIO=ON
-        -DELEMENT_ENABLE_UPDATER=OFF
-        -DELEMENT_BUILD_PLUGINS=ON
-        -DELEMENT_BUILD_TESTS=ON
-        -DBoost_INCLUDE_DIR="C:/local/boost_1_87_0"
-        -DBoost_LIBRARY_DIRS="C:/local/boost_1_87_0/lib64-msvc-14.3"
-      env:
-        BOOST_ROOT: C:/local/boost_1_87_0
   
+    - name: Configure CMake (Debug, x64)  
+      run: >-  
+        cmake -B build -G Ninja  
+        -DCMAKE_C_COMPILER=cl  
+        -DCMAKE_CXX_COMPILER=cl  
+        -DCMAKE_BUILD_TYPE=Debug  
+        -DELEMENT_ENABLE_ASIO=ON  
+        -DELEMENT_ENABLE_UPDATER=OFF  
+        -DELEMENT_BUILD_PLUGINS=ON  
+        -DELEMENT_BUILD_TESTS=ON  
+        -DBoost_INCLUDE_DIR="C:/local/boost_1_87_0"  
+        -DBoost_LIBRARY_DIRS="C:/local/boost_1_87_0/lib64-msvc-14.3"  
+        -DJACK_INCLUDE_DIR="C:/Program Files/JACK2/include"  
+      env:  
+        BOOST_ROOT: C:/local/boost_1_87_0  
   
     - name: Build  
       run: cmake --build build --config Debug  
@@ -70,18 +71,16 @@ jobs:
     - name: Run tests  
       run: ctest --test-dir build --output-on-failure  
   
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: element-windows-x64-debug
-        path: |
-          build/**/*.exe
-          build/**/*.dll
-          build/**/*.pdb
-          build/**/*.vst3/**
-          build/**/*.clap
-          build/**/*.lv2/**
-          build/**/*.component/**
+    - name: Upload build artifacts  
+      uses: actions/upload-artifact@v4  
+      with:  
+        name: element-windows-x64-debug  
+        path: |  
+          build/**/*.exe  
+          build/**/*.dll  
+          build/**/*.pdb  
+          build/**/*.vst3/**  
+          build/**/*.clap  
+          build/**/*.lv2/**  
+          build/**/*.component/**  
         if-no-files-found: warn
-
-
